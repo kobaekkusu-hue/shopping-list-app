@@ -9,9 +9,11 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
     throw new Error('GEMINI_API_KEY is not set');
   }
 
-  // モデル一覧から確認されたモデル: gemini-2.0-flash
-  // 理由: 精度向上のため、Lite版から通常版へ変更
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  // 試行するモデルの優先順位
+  // 1. gemini-2.0-flash: 最新・高精度 (CoTに最適)
+  // 2. gemini-1.5-flash: 安定・標準 (バックアップ)
+  // 3. gemini-flash-lite-latest: 軽量 (最終手段)
+  const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-lite-latest'];
 
   const categoriesList = SHOPPING_CATEGORIES.join('、');
 
@@ -60,64 +62,68 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
   ${rawText}
   `;
 
-  // リトライロジック (最大3回, 指数バックオフ + 初期ウェイト増加)
-  let retries = 3;
-  let delay = 5000; // 初回5秒待機から開始
-
-  while (retries > 0) {
+  // モデルごとのループ
+  for (const modelName of MODELS) {
     try {
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      console.log(`Trying model: ${modelName}`);
+      const model = genAI.getGenerativeModel({ model: modelName });
 
-      // JSONのパース（Markdownブロック抽出）
-      // 思考プロセスが含まれるため、```json ... ``` の部分だけを抽出する
-      const jsonMatch = text.match(/```json([\s\S]*?)```/);
+      // リトライループ (各モデルで最大1回リトライ = 計2回試行)
+      let retries = 1;
+      while (retries >= 0) {
+        try {
+          const result = await model.generateContent(prompt);
+          const response = await result.response;
+          const text = response.text();
 
-      if (!jsonMatch || !jsonMatch[1]) {
-        throw new Error('Valid JSON block not found in response');
-      }
+          // JSONパース
+          // CoTがあるため、```json ... ``` を探す
+          const jsonMatch = text.match(/```json([\s\S]*?)```/);
 
-      const jsonString = jsonMatch[1].trim();
+          if (jsonMatch && jsonMatch[1]) {
+            const jsonString = jsonMatch[1].trim();
+            const ingredients: Ingredient[] = JSON.parse(jsonString);
+            return ingredients;
+          }
 
-      try {
-        const ingredients: Ingredient[] = JSON.parse(jsonString);
-        return ingredients;
-      } catch (e) {
-        console.error("JSON parse error:", e);
-        console.error("Raw text:", text);
-        // JSONパースエラー時はフォールバックへ
-        break;
+          // JSONブロックが見つからない場合、全体がJSONかもしれないので試す(Liteモデルなどの場合)
+          // ただしCoT指示があるので基本はブロック内にあるはず
+          try {
+            const ingredients: Ingredient[] = JSON.parse(text.trim());
+            return ingredients;
+          } catch (e) {
+            throw new Error('Valid JSON block not found');
+          }
+
+        } catch (genError: any) {
+          console.error(`Error with ${modelName}:`, genError.message);
+
+          const isRateLimit = genError.status === 429 || genError.message?.includes('429');
+          const isServerErr = genError.status === 503 || genError.message?.includes('503');
+
+          // レート制限やサーバーエラーなら少し待ってリトライ
+          if ((isRateLimit || isServerErr) && retries > 0) {
+            console.log(`Retrying ${modelName} in 3s...`);
+            await new Promise(r => setTimeout(r, 3000));
+            retries--;
+            continue;
+          }
+
+          // リトライなし、または致命的エラーならループを抜けて次のモデルへ
+          // throwして外側のcatchでキャッチさせる
+          throw genError;
+        }
       }
 
     } catch (error: any) {
-      console.error(`Error calling Gemini API (retries left: ${retries - 1}):`, error.message);
-
-      if (error.status === 429 || error.message?.includes('429')) {
-        // Rate Limitなら長く待って再試行
-        console.log(`Rate limit exceeded. Waiting ${delay / 1000}s...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2; // 待機時間を倍に (5s -> 10s -> 20s)
-        retries--;
-        continue;
-      }
-
-      // 503 Service Unavailable もリトライ対象にする
-      if (error.status === 503 || error.message?.includes('503')) {
-        console.log(`Service unavailable. Waiting ${delay / 1000}s...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-        retries--;
-        continue;
-      }
-
-      // その他の致命的なエラーは諦める
-      break;
+      console.warn(`Model ${modelName} failed. Trying next model...`);
+      // 次のモデルへループ継続
+      continue;
     }
   }
 
-  // リトライ失敗後のフォールバック
-  console.warn('All retries failed or fatal error. Falling back to raw text parsing.');
+  // 全モデル失敗時のフォールバック
+  console.warn('All models failed or fatal error. Falling back to raw text parsing.');
 
   // 生テキストをそのまま返すのではなく、少し整形して返す
   // 材料リストっぽい行だけ抽出する簡易ロジック
