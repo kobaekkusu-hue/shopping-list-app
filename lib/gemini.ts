@@ -9,9 +9,9 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
     throw new Error('GEMINI_API_KEY is not set');
   }
 
-  // モデル一覧から確認された最軽量モデル: gemini-flash-lite-latest
-  // 理由: 503(高負荷)回避のため、最も軽量なLite版を使用
-  const model = genAI.getGenerativeModel({ model: 'gemini-flash-lite-latest' });
+  // モデル一覧から確認されたモデル: gemini-2.0-flash
+  // 理由: 精度向上のため、Lite版から通常版へ変更
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const categoriesList = SHOPPING_CATEGORIES.join('、');
 
@@ -22,8 +22,14 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
   これを解析し、買い物リストとして使えるように、同じ食材の分量を合算してまとめてください。
   また、その食材が「何曜日の献立に使われているか」もリスト化してください。
   
-  出力は以下のJSON形式のみでお願いします。Markdownのコードブロックは不要です。
+  まず、思考プロセス（Step-by-stepの計算過程やカテゴリ分類の根拠）を出力し、
+  その後に以下のJSON形式で結果を出力してください。
   
+  出力形式:
+  思考プロセス:
+  (ここに計算過程などを記述)
+  
+  \`\`\`json
   [
     {
       "name": "食材名（例: 玉ねぎ）",
@@ -32,6 +38,7 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
       "usedDays": ["月", "水"] 
     }
   ]
+  \`\`\`
   
   ルール:
   1. 表記ゆれは統一してください（例: "鶏もも肉"と"とり肉" -> "鶏もも肉"）。
@@ -63,8 +70,15 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
       const response = await result.response;
       const text = response.text();
 
-      // JSONのパース（Markdownブロック除去）
-      const jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      // JSONのパース（Markdownブロック抽出）
+      // 思考プロセスが含まれるため、```json ... ``` の部分だけを抽出する
+      const jsonMatch = text.match(/```json([\s\S]*?)```/);
+
+      if (!jsonMatch || !jsonMatch[1]) {
+        throw new Error('Valid JSON block not found in response');
+      }
+
+      const jsonString = jsonMatch[1].trim();
 
       try {
         const ingredients: Ingredient[] = JSON.parse(jsonString);
