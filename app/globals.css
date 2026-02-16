@@ -1,0 +1,275 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #FF7E9D;
+  /* より鮮やかなピンク */
+  --primary-hover: #FF5C85;
+  --secondary: #6B7280;
+  --text-main: #333333;
+  --text-muted: #666666;
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background-color: #f3f4f6;
+  color: var(--text-main);
+  font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+  min-height: 100vh;
+  /* 背景画像の設定 */
+  background-image: url('/stylish_kitchen_background.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 全体にオーバーレイをかけて文字を見やすくする */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.65);
+  /* 白の透過オーバーレイ */
+  backdrop-filter: blur(3px);
+  /* わずかにぼかす */
+  -webkit-backdrop-filter: blur(3px);
+  z-index: -1;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.container-custom {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+  /* スマホ用: 上下1.5rem, 左右1rem */
+}
+
+@media (min-width: 768px) {
+  .container-custom {
+    padding: 3rem 1.5rem;
+    /* PC用: 元のサイズ */
+  }
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1rem;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 1);
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  font-weight: 500;
+  padding: 0.75rem 1.5rem;
+  transition: all 0.2s;
+  border: none;
+  font-size: 1rem;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #FF7E9D 0%, #FF5C85 100%);
+  color: white;
+  padding: 0.8rem 2rem;
+  border-radius: 9999px;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  transition: all 0.3s ease;
+  border: none;
+  box-shadow: 0 4px 15px rgba(255, 126, 157, 0.4);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(255, 126, 157, 0.5);
+}
+
+.btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  background-color: white;
+  color: var(--text-main);
+  border: 1px solid var(--accent);
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: var(--accent);
+  color: white;
+}
+
+.input {
+  display: block;
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background-color: var(--card-bg);
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid var(--primary);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* プレミアム感を出すための装飾 */
+/* プレミアム感を出すための装飾 */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.92);
+  /* 背景を濃くして文字を見やすく */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #ffe4e6;
+  /* 薄いピンクのボーダーで境界を明確に */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  /* シャドウで浮き上がらせる */
+  border-radius: 1rem;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #FF9AA2 0%, #FFB7B2 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* チェックボックスのスタイル */
+.checkbox-custom {
+  appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #cbd5e1;
+  border-radius: 0.375rem;
+  margin-right: 0.5rem;
+  position: relative;
+  cursor: pointer;
+  background-color: white;
+  transition: all 0.2s;
+}
+
+.checkbox-custom:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.checkbox-custom:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+/* 曜日バッジ */
+.day-badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+  color: white;
+  font-weight: bold;
+  display: inline-block;
+  margin-right: 0.25rem;
+}
+
+.day-badge-月 {
+  background-color: #ff9a9e;
+}
+
+.day-badge-火 {
+  background-color: #fad0c4;
+  color: #555;
+}
+
+.day-badge-水 {
+  background-color: #a18cd1;
+}
+
+.day-badge-木 {
+  background-color: #fbc2eb;
+}
+
+.day-badge-金 {
+  background-color: #8fd3f4;
+}
+
+.day-badge-土 {
+  background-color: #84fab0;
+  color: #555;
+}
+
+.day-badge-日 {
+  background-color: #ffecd2;
+  color: #555;
+}
