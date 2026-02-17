@@ -3,13 +3,21 @@ import { ScrapedData, Dish } from '@/app/types';
 
 export async function scrapeRecipe(url: string): Promise<ScrapedData | null> {
     try {
-        const response = await fetch(url);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
+
+        const response = await fetch(url, { signal: controller.signal }).finally(() => {
+            clearTimeout(timeoutId);
+        });
+
         if (!response.ok) {
             console.error(`Failed to fetch ${url}: ${response.statusText}`);
             return null;
         }
 
         const html = await response.text();
+
+        // 以下既存処理...
         const $ = cheerio.load(html);
 
         // タイトルの取得

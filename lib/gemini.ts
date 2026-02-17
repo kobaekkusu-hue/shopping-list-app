@@ -11,7 +11,9 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
 
   // 試行するモデルの優先順位
   // 1. gemini-3-flash-preview: ユーザー指定
-  const MODELS = ['gemini-3-flash-preview'];
+  // 2. gemini-2.0-flash: 高速・高性能
+  // 3. gemini-1.5-flash: 安定版フォールバック
+  const MODELS = ['gemini-3-flash-preview', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
   const categoriesList = SHOPPING_CATEGORIES.join('、');
 
@@ -22,13 +24,9 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
   これを解析し、買い物リストとして使えるように、同じ食材の分量を合算してまとめてください。
   また、その食材が「何曜日の献立に使われているか」もリスト化してください。
   
-  まず、思考プロセス（Step-by-stepの計算過程やカテゴリ分類の根拠）を出力し、
-  その後に以下のJSON形式で結果を出力してください。
+  以下のJSON形式で結果を出力してください。思考プロセスなどの余計なテキストは含めないでください。
   
   出力形式:
-  思考プロセス:
-  (ここに計算過程などを記述)
-  
   \`\`\`json
   [
     {
@@ -66,8 +64,8 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
       console.log(`Trying model: ${modelName}`);
       const model = genAI.getGenerativeModel({ model: modelName });
 
-      // リトライループ (最大3回リトライ)
-      let retries = 3;
+      // リトライループ (最大2回リトライ)
+      let retries = 2;
       while (retries >= 0) {
         try {
           const result = await model.generateContent(prompt);
@@ -75,7 +73,7 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
           const text = response.text();
 
           // JSONパース
-          // CoTがあるため、```json ... ``` を探す
+          // CoTがあるため、\`\`\`json ... \`\`\` を探す
           const jsonMatch = text.match(/```json([\s\S]*?)```/);
 
           if (jsonMatch && jsonMatch[1]) {
@@ -89,6 +87,7 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
             const ingredients: Ingredient[] = JSON.parse(text.trim());
             return ingredients;
           } catch (e) {
+            // JSONパース失敗時もリトライ対象にするためエラーを投げる
             throw new Error('Valid JSON block not found');
           }
 
@@ -97,18 +96,20 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
 
           const isRateLimit = genError.status === 429 || genError.message?.includes('429');
           const isServerErr = genError.status === 503 || genError.message?.includes('503');
+          // JSONパースエラーなども含めて一時的なエラーとみなしてリトライする運用にするか、
+          // 明確なAPIエラー以外は即次モデルへ行くか。
+          // ここではレート制限・サーバーエラーのみリトライ待機を入れる。
 
-          // レート制限やサーバーエラーなら待機してリトライ
           if ((isRateLimit || isServerErr) && retries > 0) {
-            // 待機時間を段階的に増やす (10s -> 20s -> 40s)
-            const waitTime = (4 - retries) * 10000;
+            // 待機時間を短縮 (2s -> 5s)
+            const waitTime = (3 - retries) * 2000 + 1000; // 3000ms, 5000ms
             console.log(`Retrying ${modelName} in ${waitTime / 1000}s...`);
             await new Promise(r => setTimeout(r, waitTime));
             retries--;
             continue;
           }
 
-          // リトライなし、または致命的エラーならループを抜ける
+          // リトライなし、または致命的エラーならこのモデルは諦める
           throw genError;
         }
       }
