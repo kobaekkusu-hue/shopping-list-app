@@ -10,8 +10,8 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
   }
 
   // 試行するモデルの優先順位
-  // 1. gemini-2.0-flash: 最新・高精度 (現在このモデルのみ利用可能)
-  const MODELS = ['gemini-2.0-flash'];
+  // 1. gemini-3-pro-preview: ユーザー指定
+  const MODELS = ['gemini-3-pro-preview'];
 
   const categoriesList = SHOPPING_CATEGORIES.join('、');
 
