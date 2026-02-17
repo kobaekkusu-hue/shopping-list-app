@@ -12,6 +12,8 @@ export default function Home() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<ShoppingList | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
+  // 有効な日付（再集計用）
+  const [activeDates, setActiveDates] = useState<Set<string>>(new Set());
 
   // 週を変更する関数
   const changeWeek = (offset: number) => {
@@ -23,6 +25,7 @@ export default function Home() {
     setError('');
     setResult(null);
     setCheckedItems(new Set());
+    setActiveDates(new Set());
 
     // 選択された月曜日から金曜日までの日付を計算
     const dateStrings = [];
@@ -49,6 +52,15 @@ export default function Home() {
       }
 
       setResult(data);
+
+      // 初期状態では成功した全日付をActiveにする
+      if (data.recipes) {
+        const successDates = data.recipes
+          .filter((r: any) => r.status === 'success')
+          .map((r: any) => r.date);
+        setActiveDates(new Set(successDates));
+      }
+
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -58,6 +70,66 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const updateList = async () => {
+    if (!result) return;
+
+    setLoading(true);
+    setError('');
+
+    // Activeな日付のrawIngredientsを収集
+    const targetIngredients: string[] = [];
+    result.recipes.forEach(recipe => {
+      if (activeDates.has(recipe.date) && recipe.rawIngredients) {
+        targetIngredients.push(recipe.rawIngredients);
+      }
+    });
+
+    if (targetIngredients.length === 0) {
+      setError('集計対象の献立がありません');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/aggregate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ingredientsData: targetIngredients }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '再集計に失敗しました');
+      }
+
+      // ingredientsのみ更新
+      setResult(prev => prev ? { ...prev, ingredients: data.ingredients } : null);
+
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('予期せぬエラーが発生しました');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleDate = (date: string) => {
+    // resultがない場合は何もしない
+    if (!result) return;
+
+    const newActive = new Set(activeDates);
+    if (newActive.has(date)) {
+      newActive.delete(date);
+    } else {
+      newActive.add(date);
+    }
+    setActiveDates(newActive);
   };
 
   const toggleItem = (name: string) => {
@@ -132,50 +204,73 @@ export default function Home() {
         <div className="grid md:grid-cols-3 gap-8 animate-fade-in-up">
           {/* Left Column: Recipes */}
           <div className="md:col-span-1 space-y-4">
-            <h2 className="text-xl font-bold text-gray-700 flex items-center gap-2 sticky top-4 bg-transparent pb-2 z-10">
-              <span className="bg-pink-100 text-pink-500 p-1 rounded">📅</span> 今週の献立
-            </h2>
-            {result.recipes.map((menu, idx) => (
-              <a
-                key={idx}
-                href={menu.status === 'success' ? menu.url : '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`block card group relative overflow-hidden ${menu.status === 'failed' ? 'border-red-200 bg-red-50' : 'hover:border-pink-300'}`}
+            <div className="sticky top-4 bg-transparent pb-2 z-10">
+              <h2 className="text-xl font-bold text-gray-700 flex items-center gap-2 mb-2">
+                <span className="bg-pink-100 text-pink-500 p-1 rounded">📅</span> 今週の献立
+              </h2>
+              <p className="text-xs text-gray-500 mb-2">不要な曜日のチェックを外して「再集計」を押してください</p>
+              <button
+                onClick={updateList}
+                disabled={loading}
+                className="w-full bg-white/50 hover:bg-white border border-pink-200 text-pink-600 font-bold py-2 px-4 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 text-sm"
               >
-                <div className="flex flex-col h-full">
-                  <div className="text-xs font-bold text-gray-400 mb-2 flex justify-between items-center border-b pb-1">
-                    <span className="text-lg text-pink-500">{menu.dayOfWeek ? `${menu.dayOfWeek}` : '-'}</span>
-                    <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full">{menu.date}</span>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : '🔄'} 選択した献立で再集計
+              </button>
+            </div>
+            {result.recipes.map((menu, idx) => {
+              const isActive = activeDates.has(menu.date);
+              return (
+                <div key={idx} className={`relative transition-all duration-300 ${isActive ? '' : 'opacity-50 grayscale'}`}>
+                  <div className="absolute top-2 right-2 z-20">
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => menu.status === 'success' && toggleDate(menu.date)}
+                      disabled={menu.status === 'failed'}
+                      className="w-5 h-5 accent-pink-500 cursor-pointer"
+                    />
                   </div>
+                  <a
+                    href={menu.status === 'success' ? menu.url : '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`block card group relative overflow-hidden ${menu.status === 'failed' ? 'border-red-200 bg-red-50' : isActive ? 'hover:border-pink-300' : 'border-gray-200'}`}
+                  >
+                    <div className="flex flex-col h-full">
+                      <div className="text-xs font-bold text-gray-400 mb-2 flex justify-between items-center border-b pb-1">
+                        <span className="text-lg text-pink-500">{menu.dayOfWeek ? `${menu.dayOfWeek}` : '-'}</span>
+                        <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full">{menu.date}</span>
+                      </div>
 
-                  {menu.dishes && menu.dishes.length > 0 ? (
-                    <div className="space-y-2">
-                      {menu.dishes.map((dish, dIdx) => (
-                        <div key={dIdx} className="flex items-start gap-2">
-                          <span className={dish.type === 'main' ? 'tag-main shrink-0' : 'tag-side shrink-0'}>
-                            {dish.type === 'main' ? '主' : '副'}
-                          </span>
-                          <span className={`text-sm leading-tight ${dish.type === 'main' ? 'font-bold text-gray-700' : 'text-gray-600'}`}>
-                            {dish.title}
-                          </span>
+                      {menu.dishes && menu.dishes.length > 0 ? (
+                        <div className="space-y-2">
+                          {menu.dishes.map((dish, dIdx) => (
+                            <div key={dIdx} className="flex items-start gap-2">
+                              <span className={dish.type === 'main' ? 'tag-main shrink-0' : 'tag-side shrink-0'}>
+                                {dish.type === 'main' ? '主' : '副'}
+                              </span>
+                              <span className={`text-sm leading-tight ${dish.type === 'main' ? 'font-bold text-gray-700' : 'text-gray-600'}`}>
+                                {dish.title}
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className={`font-bold ${menu.status === 'failed' ? 'text-gray-400' : 'text-gray-800'}`}>
-                      {menu.status === 'failed' ? '取得失敗' : 'データなし'}
-                    </div>
-                  )}
+                      ) : (
+                        <div className={`font-bold ${menu.status === 'failed' ? 'text-gray-400' : 'text-gray-800'}`}>
+                          {menu.status === 'failed' ? '取得失敗' : 'データなし'}
+                        </div>
+                      )}
 
-                  {menu.status === 'failed' && (
-                    <div className="text-red-400 text-xs mt-2 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> 取得失敗
+                      {menu.status === 'failed' && (
+                        <div className="text-red-400 text-xs mt-2 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> 取得失敗
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </a>
                 </div>
-              </a>
-            ))}
+              );
+            })}
           </div>
 
           {/* Right Column: Shopping List */}
@@ -248,6 +343,21 @@ export default function Home() {
                   </div>
                 );
               })}
+            </div>
+
+            {/* Raw Data Display */}
+            <div className="mt-12 border-t border-gray-200 pt-8">
+              <details className="group">
+                <summary className="flex items-center gap-2 cursor-pointer text-gray-400 hover:text-gray-600 transition-colors list-none">
+                  <span className="transform group-open:rotate-90 transition-transform">▶</span>
+                  <span className="font-bold text-sm">解析用生データを表示</span>
+                </summary>
+                <div className="mt-4 bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-xs overflow-x-auto shadow-inner">
+                  <pre>
+                    {result.recipes.map(r => r.rawIngredients).filter(Boolean).join('\n\n-------------------\n\n') || "データなし"}
+                  </pre>
+                </div>
+              </details>
             </div>
           </div>
         </div>

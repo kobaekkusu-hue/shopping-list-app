@@ -7,8 +7,21 @@ import { DayMenu } from '@/app/types';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const urls = body.urls;
+        const { urls, ingredientsData } = body;
 
+        // 再集計モード: クライアントからフィルタリング済みのテキスト配列が送られてくる場合
+        if (ingredientsData && Array.isArray(ingredientsData)) {
+            const combinedRawText = ingredientsData.join('\n\n');
+            if (!combinedRawText.trim()) {
+                return NextResponse.json({ error: 'No ingredients found to aggregate', ingredients: [] });
+            }
+
+            // AIで集約のみ行う
+            const ingredients = await aggregateIngredients(combinedRawText);
+            return NextResponse.json({ ingredients });
+        }
+
+        // 通常モード: URLからスクレイピング
         if (!urls || !Array.isArray(urls)) {
             return NextResponse.json({ error: 'URLs array is required' }, { status: 400 });
         }
@@ -31,19 +44,25 @@ export async function POST(request: Request) {
                     dayOfWeek = days[dateObj.getDay()];
                 }
 
-                // メニュー情報を保存 (RecipeInfo -> DayMenu に変更)
+                // AIに渡すテキストにヘッダーを付与
+                const formattedRawText = data.rawIngredients
+                    ? `【${dayOfWeek} 曜日: ${data.title}】\n${data.rawIngredients} `
+                    : '';
+
+                if (formattedRawText) {
+                    rawIngredientsList.push(formattedRawText);
+                }
+
+                // メニュー情報を保存
                 menus.push({
                     date: data.dateStr,
                     dayOfWeek,
                     url: data.url,
                     status: 'success',
-                    dishes: data.dishes // 主菜・副菜リスト
+                    dishes: data.dishes,
+                    rawIngredients: formattedRawText // 生データも保存してフロントに返す
                 });
 
-                // AIに渡すテキストにヘッダーを付与
-                if (data.rawIngredients) {
-                    rawIngredientsList.push(`【${dayOfWeek} 曜日: ${data.title}】\n${data.rawIngredients} `);
-                }
             } else {
                 // 取得失敗時の情報を保存
                 menus.push({

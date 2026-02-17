@@ -12,6 +12,7 @@ export interface DayMenu {
     url: string;
     status: 'success' | 'failed';
     dishes: Dish[]; // 主菜・副菜のリスト
+    rawIngredients?: string; // スクレイピングした生の材料テキスト
 }
 
 export interface Ingredient {
