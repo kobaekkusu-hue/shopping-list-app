@@ -27,10 +27,12 @@ export async function POST(request: Request) {
         }
 
         // 1. 全URLをスクレイピング
-        const rawIngredientsList: string[] = [];
+        // 1. 全URLをスクレイピング
+        // 並列処理で高速化 (5リクエスト程度なら同時でOK)
         const menus: DayMenu[] = [];
+        const rawIngredientsList: string[] = [];
 
-        for (const url of urls) {
+        const scrapePromises = urls.map(async (url) => {
             const data = await scrapeRecipe(url);
             if (data) {
                 // 日付文字列から曜日を計算
@@ -49,33 +51,45 @@ export async function POST(request: Request) {
                     ? `【${dayOfWeek} 曜日: ${data.title}】\n${data.rawIngredients} `
                     : '';
 
-                if (formattedRawText) {
-                    rawIngredientsList.push(formattedRawText);
-                }
-
-                // メニュー情報を保存
-                menus.push({
-                    date: data.dateStr,
-                    dayOfWeek,
-                    url: data.url,
-                    status: 'success',
-                    dishes: data.dishes,
-                    rawIngredients: formattedRawText // 生データも保存してフロントに返す
-                });
-
+                return {
+                    success: true,
+                    data: {
+                        date: data.dateStr,
+                        dayOfWeek,
+                        url: data.url,
+                        status: 'success' as const,
+                        dishes: data.dishes,
+                        rawIngredients: formattedRawText
+                    },
+                    rawText: formattedRawText
+                };
             } else {
-                // 取得失敗時の情報を保存
-                menus.push({
-                    date: '',
-                    dayOfWeek: '',
-                    url: url,
-                    status: 'failed',
-                    dishes: []
-                });
+                return {
+                    success: false,
+                    data: {
+                        date: '',
+                        dayOfWeek: '',
+                        url: url,
+                        status: 'failed' as const,
+                        dishes: []
+                    }
+                };
             }
-            // Rate Limit回避のためのウェイト
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+        });
+
+        const results = await Promise.all(scrapePromises);
+
+        // 結果を整理（日付順などに並べ替える必要があればここでやるが、入力順＝日付順と仮定）
+        results.forEach(result => {
+            if (result.success && result.data) {
+                menus.push(result.data);
+                if (result.rawText) {
+                    rawIngredientsList.push(result.rawText);
+                }
+            } else if (result.data) {
+                menus.push(result.data);
+            }
+        });
 
         const combinedRawText = rawIngredientsList.join('\n\n');
 
