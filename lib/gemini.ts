@@ -11,9 +11,9 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
 
   // 試行するモデルの優先順位
   // 1. gemini-2.0-flash: 最新・高精度 (CoTに最適)
-  // 2. gemini-1.5-flash: 安定・標準 (バックアップ)
-  // 3. gemini-flash-lite-latest: 軽量 (最終手段)
-  const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-lite-latest'];
+  // 2. gemini-1.5-flash-latest: 安定・標準 (バックアップ)
+  // 3. gemini-1.5-pro: 高性能バックアップ
+  const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro'];
 
   const categoriesList = SHOPPING_CATEGORIES.join('、');
 
@@ -103,8 +103,8 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
 
           // レート制限やサーバーエラーなら少し待ってリトライ
           if ((isRateLimit || isServerErr) && retries > 0) {
-            console.log(`Retrying ${modelName} in 3s...`);
-            await new Promise(r => setTimeout(r, 3000));
+            console.log(`Retrying ${modelName} in 10s...`);
+            await new Promise(r => setTimeout(r, 10000));
             retries--;
             continue;
           }
