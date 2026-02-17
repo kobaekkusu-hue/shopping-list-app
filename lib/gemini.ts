@@ -10,10 +10,8 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
   }
 
   // 試行するモデルの優先順位
-  // 1. gemini-2.0-flash: 最新・高精度 (CoTに最適)
-  // 2. gemini-1.5-flash-latest: 安定・標準 (バックアップ)
-  // 3. gemini-1.5-pro: 高性能バックアップ
-  const MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro'];
+  // 1. gemini-2.0-flash: 最新・高精度 (現在このモデルのみ利用可能)
+  const MODELS = ['gemini-2.0-flash'];
 
   const categoriesList = SHOPPING_CATEGORIES.join('、');
 
@@ -68,8 +66,8 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
       console.log(`Trying model: ${modelName}`);
       const model = genAI.getGenerativeModel({ model: modelName });
 
-      // リトライループ (各モデルで最大1回リトライ = 計2回試行)
-      let retries = 1;
+      // リトライループ (最大3回リトライ)
+      let retries = 3;
       while (retries >= 0) {
         try {
           const result = await model.generateContent(prompt);
@@ -86,8 +84,7 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
             return ingredients;
           }
 
-          // JSONブロックが見つからない場合、全体がJSONかもしれないので試す(Liteモデルなどの場合)
-          // ただしCoT指示があるので基本はブロック内にあるはず
+          // JSONブロックが見つからない場合
           try {
             const ingredients: Ingredient[] = JSON.parse(text.trim());
             return ingredients;
@@ -101,16 +98,17 @@ export async function aggregateIngredients(rawText: string): Promise<Ingredient[
           const isRateLimit = genError.status === 429 || genError.message?.includes('429');
           const isServerErr = genError.status === 503 || genError.message?.includes('503');
 
-          // レート制限やサーバーエラーなら少し待ってリトライ
+          // レート制限やサーバーエラーなら待機してリトライ
           if ((isRateLimit || isServerErr) && retries > 0) {
-            console.log(`Retrying ${modelName} in 10s...`);
-            await new Promise(r => setTimeout(r, 10000));
+            // 待機時間を段階的に増やす (10s -> 20s -> 40s)
+            const waitTime = (4 - retries) * 10000;
+            console.log(`Retrying ${modelName} in ${waitTime / 1000}s...`);
+            await new Promise(r => setTimeout(r, waitTime));
             retries--;
             continue;
           }
 
-          // リトライなし、または致命的エラーならループを抜けて次のモデルへ
-          // throwして外側のcatchでキャッチさせる
+          // リトライなし、または致命的エラーならループを抜ける
           throw genError;
         }
       }
