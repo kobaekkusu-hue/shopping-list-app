@@ -11,15 +11,18 @@ const prismaClientSingleton = () => {
         console.warn('⚠️ WARNING: DATABASE_URL is not set. This is expected during Vercel build if not provided, but must be set for runtime.')
     }
 
+    const isPooler = connectionString?.includes('pooler.supabase.com') || connectionString?.includes('pgbouncer=true')
+
     const pool = new pg.Pool({
         connectionString,
         // localhost への自動フォールバックを避けるための設定
         host: connectionString ? undefined : 'missing-database-url-host',
-        // サーバーレス環境（Vercel）からの接続安定性のための設定
-        ssl: connectionString?.includes('supabase.co') ? { rejectUnauthorized: false } : false,
-        connectionTimeoutMillis: 10000,
+        // サーバーレス環境（Vercel）から Connection Pooler への接続安定性のための設定
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 15000,
         idleTimeoutMillis: 30000,
-        max: 10
+        // Pooler側でプールされているため、クライアント側の最大接続数は小さく抑える
+        max: isPooler ? 1 : 10
     })
     const adapter = new PrismaPg(pool)
     return new PrismaClient({ adapter })
