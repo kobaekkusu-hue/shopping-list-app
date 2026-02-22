@@ -6,14 +6,9 @@ const prismaClientSingleton = () => {
     const connectionString = process.env.DATABASE_URL
 
     if (!connectionString) {
-        // Vercelのログで目立つようにエラーを出力
-        const errorMsg = '❌ ERROR: DATABASE_URL is not set. Check your Vercel Environment Variables.'
-        console.error(errorMsg)
-
-        if (process.env.NODE_ENV === 'production') {
-            // 本番環境では、接続できないクライアントで続行させず例外を投げる
-            throw new Error(errorMsg)
-        }
+        // Vercelのデプロイ時のビルドプロセス（DATABASE_URLが環境変数にない状態）で
+        // ビルドを失敗させないよう、警告のみを出力して例外は投げないようにする。
+        console.warn('⚠️ WARNING: DATABASE_URL is not set. This is expected during Vercel build if not provided, but must be set for runtime.')
     }
 
     const pool = new pg.Pool({
