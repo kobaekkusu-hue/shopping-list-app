@@ -14,7 +14,12 @@ const prismaClientSingleton = () => {
     const pool = new pg.Pool({
         connectionString,
         // localhost への自動フォールバックを避けるための設定
-        host: connectionString ? undefined : 'missing-database-url-host'
+        host: connectionString ? undefined : 'missing-database-url-host',
+        // サーバーレス環境（Vercel）からの接続安定性のための設定
+        ssl: connectionString?.includes('supabase.co') ? { rejectUnauthorized: false } : false,
+        connectionTimeoutMillis: 10000,
+        idleTimeoutMillis: 30000,
+        max: 10
     })
     const adapter = new PrismaPg(pool)
     return new PrismaClient({ adapter })
