@@ -16,10 +16,12 @@ export interface DayMenu {
 }
 
 export interface Ingredient {
+    id?: string; // DB保存後に付与されるID
     name: string;
     amount: string;
     category: string;
     usedDays: string[];
+    isChecked?: boolean; // 購入済みフラグ
 }
 
 export interface ScrapedData {

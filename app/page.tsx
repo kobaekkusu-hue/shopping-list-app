@@ -1,23 +1,89 @@
-'use client';
-
-import { useState } from 'react';
-import { ShoppingList, Ingredient, SHOPPING_CATEGORIES } from './types'; // Ingredientを戻す
+import { useState, useEffect, useCallback } from 'react';
+import { ShoppingList, Ingredient, SHOPPING_CATEGORIES } from './types';
 import { format, addDays, startOfWeek, addWeeks } from 'date-fns';
-import { ShoppingBag, Calendar, AlertCircle, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'; // アイコン追加
+import { ShoppingBag, Calendar, AlertCircle, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 export default function Home() {
-  // 週の開始日（月曜日基準）を管理
   const [selectedDate, setSelectedDate] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<ShoppingList | null>(null);
+  // チェック状態はDB固有のIDまたは材料名で管理（DB保存後はIDを優先）
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
-  // 有効な日付（再集計用）
   const [activeDates, setActiveDates] = useState<Set<string>>(new Set());
 
-  // 週を変更する関数
+  const weekStartDateStr = format(selectedDate, 'yyyyMMdd');
+
+  // DBからリストを取得する関数
+  const fetchSavedList = useCallback(async (dateStr: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/list?weekStartDate=${dateStr}`);
+      const data = await response.json();
+
+      if (response.ok && data.found) {
+        setResult({
+          recipes: data.data.recipes,
+          ingredients: data.data.ingredients
+        });
+        setActiveDates(new Set(data.data.activeDates));
+
+        // チェック状態の復元
+        const newChecked = new Set<string>();
+        data.data.ingredients.forEach((ing: Ingredient) => {
+          if (ing.isChecked && ing.id) {
+            newChecked.add(ing.id);
+          }
+        });
+        setCheckedItems(newChecked);
+      } else {
+        // データがない場合はリセット
+        setResult(null);
+        setCheckedItems(new Set());
+        setActiveDates(new Set());
+      }
+    } catch (err) {
+      console.error('Failed to fetch saved list:', err);
+      setError('データの読み込みに失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 週が切り替わった時に自動読み込み
+  useEffect(() => {
+    fetchSavedList(weekStartDateStr);
+  }, [weekStartDateStr, fetchSavedList]);
+
   const changeWeek = (offset: number) => {
     setSelectedDate(prev => addWeeks(prev, offset));
+  };
+
+  // 生成したリストをDBに保存する共通関数
+  const saveToDb = async (listData: ShoppingList, active: Set<string>) => {
+    try {
+      const response = await fetch('/api/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          weekStartDate: weekStartDateStr,
+          recipesData: listData.recipes,
+          activeDates: Array.from(active),
+          ingredients: listData.ingredients
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        // 保存後のIDが付与された材料リストで更新
+        setResult({
+          recipes: listData.recipes,
+          ingredients: data.ingredients
+        });
+      }
+    } catch (err) {
+      console.error('Failed to save list to DB:', err);
+    }
   };
 
   const generateList = async () => {
@@ -27,14 +93,12 @@ export default function Home() {
     setCheckedItems(new Set());
     setActiveDates(new Set());
 
-    // 選択された月曜日から金曜日までの日付を計算
     const dateStrings = [];
     for (let i = 0; i < 5; i++) {
       const date = addDays(selectedDate, i);
       dateStrings.push(format(date, 'yyyyMMdd'));
     }
 
-    // URLを生成 (kYYYYMMDD形式)
     const urls = dateStrings.map(d => `https://www.lettuceclub.net/recipe/kondate/detail/k${d}/`);
 
     try {
@@ -47,26 +111,22 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        // 部分的にレシピ取れたかもしれないのでdataがあれば表示したいが、今回はエラー時はエラーとして扱う
         throw new Error(data.error || 'リストの生成に失敗しました');
       }
 
-      setResult(data);
+      const successDates = data.recipes
+        .filter((r: any) => r.status === 'success')
+        .map((r: any) => r.date);
+      const newActive = new Set<string>(successDates);
 
-      // 初期状態では成功した全日付をActiveにする
-      if (data.recipes) {
-        const successDates = data.recipes
-          .filter((r: any) => r.status === 'success')
-          .map((r: any) => r.date);
-        setActiveDates(new Set(successDates));
-      }
+      setResult(data);
+      setActiveDates(newActive);
+
+      // DBに初保存
+      await saveToDb(data, newActive);
 
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('予期せぬエラーが発生しました');
-      }
+      setError(err instanceof Error ? err.message : '予期せぬエラーが発生しました');
     } finally {
       setLoading(false);
     }
@@ -78,7 +138,6 @@ export default function Home() {
     setLoading(true);
     setError('');
 
-    // Activeな日付のrawIngredientsを収集
     const targetIngredients: string[] = [];
     result.recipes.forEach(recipe => {
       if (activeDates.has(recipe.date) && recipe.rawIngredients) {
@@ -105,24 +164,21 @@ export default function Home() {
         throw new Error(data.error || '再集計に失敗しました');
       }
 
-      // ingredientsのみ更新
-      setResult(prev => prev ? { ...prev, ingredients: data.ingredients } : null);
+      const newList = { ...result, ingredients: data.ingredients };
+
+      // DBを新しい材料構成で更新（上書き）
+      await saveToDb(newList, activeDates);
+      // saveToDb内でsetResultされる
 
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('予期せぬエラーが発生しました');
-      }
+      setError(err instanceof Error ? err.message : '予期せぬエラーが発生しました');
     } finally {
       setLoading(false);
     }
   };
 
   const toggleDate = (date: string) => {
-    // resultがない場合は何もしない
     if (!result) return;
-
     const newActive = new Set(activeDates);
     if (newActive.has(date)) {
       newActive.delete(date);
@@ -132,14 +188,32 @@ export default function Home() {
     setActiveDates(newActive);
   };
 
-  const toggleItem = (name: string) => {
+  const toggleItem = async (ing: Ingredient) => {
+    if (!ing.id) return; // IDがない（保存前）場合は何もしない
+
+    const isChecked = !checkedItems.has(ing.id);
+
+    // オプティミスティック更新
     const newChecked = new Set(checkedItems);
-    if (newChecked.has(name)) {
-      newChecked.delete(name);
+    if (isChecked) {
+      newChecked.add(ing.id);
     } else {
-      newChecked.add(name);
+      newChecked.delete(ing.id);
     }
     setCheckedItems(newChecked);
+
+    // DB更新
+    try {
+      await fetch('/api/list/check', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: ing.id, isChecked }),
+      });
+    } catch (err) {
+      console.error('Failed to update check status in DB:', err);
+      // 失敗した場合は元に戻す
+      setCheckedItems(checkedItems);
+    }
   };
 
   // カテゴリごとのグループ化
@@ -294,20 +368,20 @@ export default function Home() {
                     {hasItems ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {items.map((item, idx) => {
-                          const key = `${category}-${item.name}-${idx}`;
+                          const key = item.id || `${category}-${item.name}-${idx}`;
                           const isChecked = checkedItems.has(key);
                           return (
                             <div
                               key={key}
                               className={`flex items-start gap-3 p-2 rounded-lg transition-all cursor-pointer ${isChecked ? 'bg-gray-50 opacity-50' : 'hover:bg-white/50'}`}
-                              onClick={() => toggleItem(key)}
+                              onClick={() => toggleItem(item)}
                             >
                               <label className="flex items-start gap-3 w-full cursor-pointer group">
                                 <div className="relative pt-1 flex-shrink-0">
                                   <input
                                     type="checkbox"
                                     checked={isChecked}
-                                    onChange={() => toggleItem(key)}
+                                    onChange={() => toggleItem(item)}
                                     className="checkbox-custom appearance-none w-5 h-5 border-2 border-gray-300 rounded focus:outline-none checked:bg-pink-500 checked:border-pink-500 transition-colors"
                                   />
                                 </div>
