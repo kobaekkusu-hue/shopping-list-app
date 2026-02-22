@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect, useCallback } from 'react';
 import { ShoppingList, Ingredient, SHOPPING_CATEGORIES } from './types';
 import { format, addDays, startOfWeek, addWeeks } from 'date-fns';
@@ -111,7 +113,7 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'リストの生成に失敗しました');
+        throw new Error(data.details || data.error || 'リストの生成に失敗しました');
       }
 
       const successDates = data.recipes
@@ -161,7 +163,7 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || '再集計に失敗しました');
+        throw new Error(data.details || data.error || '再集計に失敗しました');
       }
 
       const newList = { ...result, ingredients: data.ingredients };

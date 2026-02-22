@@ -39,9 +39,9 @@ export async function GET(request: Request) {
                 }))
             }
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error fetching shopping list:', error);
-        return NextResponse.json({ error: 'Failed to fetch shopping list' }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to fetch shopping list', details: error.message }, { status: 500 });
     }
 }
 
@@ -92,8 +92,8 @@ export async function POST(request: Request) {
         }));
 
         return NextResponse.json({ success: true, ingredients: savedIngredients });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error saving shopping list:', error);
-        return NextResponse.json({ error: 'Failed to save shopping list' }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to save shopping list', details: error.message }, { status: 500 });
     }
 }

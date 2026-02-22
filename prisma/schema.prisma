@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,25 +7,24 @@ datasource db {
 }
 
 model ShoppingList {
-  id            String             @id @default(cuid())
-  weekStartDate String             @unique // YYYYMMDD 形式。週を特定するための一意なIDとして扱う
-  recipesData   String             // JSON文字列: その週の献立（レシピ）データ全体
-  activeDates   String             // JSON文字列: 選択されている（有効な）日付の配列
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  ingredients   IngredientItem[]   // このリストに紐づく材料アイテム
+  id            String           @id @default(cuid())
+  weekStartDate String           @unique
+  recipesData   String
+  activeDates   String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  ingredients   IngredientItem[]
 }
 
 model IngredientItem {
-  id            String       @id @default(cuid())
-  listId        String
-  list          ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
-  
-  name          String
-  amount        String
-  category      String
-  usedDays      String       // JSON文字列: ["月", "水"] などの配列
-  isChecked     Boolean      @default(false)
-  
+  id        String       @id @default(cuid())
+  listId    String
+  name      String
+  amount    String
+  category  String
+  usedDays  String
+  isChecked Boolean      @default(false)
+  list      ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
   @@index([listId])
 }
