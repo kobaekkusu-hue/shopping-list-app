@@ -3,21 +3,24 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 
 const prismaClientSingleton = () => {
-    const isProduction = process.env.NODE_ENV === 'production'
     const connectionString = process.env.DATABASE_URL
 
-    console.log(`[Prisma] Initializing client. env=${process.env.NODE_ENV}, has_url=${!!connectionString}`)
-
     if (!connectionString) {
-        if (isProduction) {
-            // ビルド時などは警告に留める（エラーメッセージを詳細にする）
-            console.error('❌ FATAL: DATABASE_URL is not set in production environment.')
-            return new PrismaClient()
+        // Vercelのログで目立つようにエラーを出力
+        const errorMsg = '❌ ERROR: DATABASE_URL is not set. Check your Vercel Environment Variables.'
+        console.error(errorMsg)
+
+        if (process.env.NODE_ENV === 'production') {
+            // 本番環境では、接続できないクライアントで続行させず例外を投げる
+            throw new Error(errorMsg)
         }
-        throw new Error('DATABASE_URL is not set.')
     }
 
-    const pool = new pg.Pool({ connectionString })
+    const pool = new pg.Pool({
+        connectionString,
+        // localhost への自動フォールバックを避けるための設定
+        host: connectionString ? undefined : 'missing-database-url-host'
+    })
     const adapter = new PrismaPg(pool)
     return new PrismaClient({ adapter })
 }
