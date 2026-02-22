@@ -29,12 +29,12 @@ export async function GET(request: Request) {
             data: {
                 recipes: JSON.parse(list.recipesData),
                 activeDates: JSON.parse(list.activeDates),
-                ingredients: list.ingredients.map((ing: Ingredient) => ({
+                ingredients: list.ingredients.map((ing: any) => ({
                     id: ing.id,
                     name: ing.name,
                     amount: ing.amount,
                     category: ing.category,
-                    usedDays: JSON.parse(ing.usedDays as unknown as string),
+                    usedDays: JSON.parse(ing.usedDays),
                     isChecked: ing.isChecked
                 }))
             }
@@ -82,12 +82,12 @@ export async function POST(request: Request) {
         });
 
         // 保存後に、クライアント側で状態同期しやすいようにIDを含めたアイテム情報を返す
-        const savedIngredients = newList.ingredients.map((ing: Ingredient) => ({
+        const savedIngredients = newList.ingredients.map((ing: any) => ({
             id: ing.id,
             name: ing.name,
             amount: ing.amount,
             category: ing.category,
-            usedDays: JSON.parse(ing.usedDays as unknown as string),
+            usedDays: JSON.parse(ing.usedDays),
             isChecked: ing.isChecked
         }));
 
